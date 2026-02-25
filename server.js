@@ -134,6 +134,146 @@ fastify.get('/stats/overview', async (request, reply) => {
     }
 })
 
+fastify.get('/stats/top-pages', async (request, reply) => {
+    if (!requireStatsAuth(request, reply)) return
+
+    const days = Math.max(1, Math.min(365, toInt(request.query?.days, 30)))
+    const limit = Math.max(1, Math.min(100, toInt(request.query?.limit, 10)))
+
+    const client = await pool.connect()
+    try {
+        const { rows } = await client.query(
+            `
+            SELECT
+                path,
+                COUNT(*)::bigint AS count
+            FROM events
+            WHERE created_at >= now() - ($1::int * interval '1 day')
+              AND type = 'page_view'
+              AND path IS NOT NULL
+            GROUP BY 1
+            ORDER BY 2 DESC
+            LIMIT $2::int;
+            `,
+            [days, limit]
+        )
+
+        return {
+            ok: true,
+            window_days: days,
+            items: rows.map(r => ({ path: r.path, count: Number(r.count) })),
+        }
+    } finally {
+        client.release()
+    }
+})
+
+fastify.get('/stats/top-referrers', async (request, reply) => {
+    if (!requireStatsAuth(request, reply)) return
+
+    const days = Math.max(1, Math.min(365, toInt(request.query?.days, 30)))
+    const limit = Math.max(1, Math.min(100, toInt(request.query?.limit, 10)))
+
+    const client = await pool.connect()
+    try {
+        const { rows } = await client.query(
+            `
+            SELECT
+                COALESCE(NULLIF(referrer, ''), '(direct)') AS referrer,
+                COUNT(*)::bigint AS count
+            FROM events
+            WHERE created_at >= now() - ($1::int * interval '1 day')
+              AND type = 'page_view'
+            GROUP BY 1
+            ORDER BY 2 DESC
+            LIMIT $2::int;
+            `,
+            [days, limit]
+        )
+
+        return {
+            ok: true,
+            window_days: days,
+            items: rows.map(r => ({ referrer: r.referrer, count: Number(r.count) })),
+        }
+    } finally {
+        client.release()
+    }
+})
+
+fastify.get('/stats/top-outbound', async (request, reply) => {
+    if (!requireStatsAuth(request, reply)) return
+
+    const days = Math.max(1, Math.min(365, toInt(request.query?.days, 30)))
+    const limit = Math.max(1, Math.min(100, toInt(request.query?.limit, 10)))
+
+    const client = await pool.connect()
+    try {
+        const { rows } = await client.query(
+            `
+            SELECT
+                COALESCE(NULLIF(data->>'url', ''), '(unknown)') AS url,
+                COUNT(*)::bigint AS count
+            FROM events
+            WHERE created_at >= now() - ($1::int * interval '1 day')
+              AND type = 'event'
+              AND name = 'outbound_click'
+            GROUP BY 1
+            ORDER BY 2 DESC
+            LIMIT $2::int;
+            `,
+            [days, limit]
+        )
+
+        return {
+            ok: true,
+            window_days: days,
+            items: rows.map(r => ({ url: r.url, count: Number(r.count) })),
+        }
+    } finally {
+        client.release()
+    }
+})
+
+fastify.get('/stats/recent-events', async (request, reply) => {
+    if (!requireStatsAuth(request, reply)) return
+
+    const limit = Math.max(1, Math.min(200, toInt(request.query?.limit, 25)))
+
+    const client = await pool.connect()
+    try {
+        const { rows } = await client.query(
+            `
+            SELECT
+                created_at,
+                type,
+                name,
+                path,
+                session_id,
+                data
+            FROM events
+            ORDER BY created_at DESC
+            LIMIT $1::int;
+            `,
+            [limit]
+        )
+
+        return {
+            ok: true,
+            items: rows.map(r => ({
+                created_at: r.created_at,
+                type: r.type,
+                name: r.name,
+                path: r.path,
+                session_id: r.session_id,
+                data: r.data,
+            })),
+        }
+    } finally {
+        client.release()
+    }
+})
+
 fastify.get('/stats/timeseries', async (request, reply) => {
     if (!requireStatsAuth(request, reply)) return
 
