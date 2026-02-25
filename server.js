@@ -19,9 +19,14 @@ await fastify.register(cors, {
     methods: ['POST', 'GET', 'OPTIONS'],
 })
 
+if (!process.env.DATABASE_URL) {
+    fastify.log.error('Missing DATABASE_URL. Configure a Postgres database and set DATABASE_URL in environment variables.')
+    throw new Error('Missing DATABASE_URL')
+}
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : undefined,
+    ssl: process.env.PGSSL === 'true' || process.env.PGSSL === '1' ? { rejectUnauthorized: false } : undefined,
 })
 
 const requireStatsAuth = (request, reply) => {
