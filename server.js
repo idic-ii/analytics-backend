@@ -15,7 +15,16 @@ const getOrigins = () => {
 }
 
 await fastify.register(cors, {
-    origin: getOrigins(),
+    origin: (origin, cb) => {
+        const allowed = getOrigins()
+        if (allowed === true) return cb(null, true)
+
+        if (!origin) return cb(null, true)
+        if (Array.isArray(allowed) && allowed.includes(origin)) return cb(null, true)
+
+        return cb(new Error('Not allowed by CORS'), false)
+    },
+    credentials: true,
     methods: ['POST', 'GET', 'OPTIONS'],
 })
 
