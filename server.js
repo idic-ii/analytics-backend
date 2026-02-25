@@ -6,10 +6,16 @@ const { Pool } = pg
 
 const fastify = Fastify({ logger: true })
 
+const normalizeOrigin = (value) => {
+    if (!value) return ''
+    const s = String(value).trim().replace(/^"|"$/g, '').replace(/^'|'$/g, '')
+    return s.replace(/\/+$/, '')
+}
+
 const getOrigins = () => {
     const raw = process.env.CORS_ORIGIN
     if (!raw) return true
-    const parts = raw.split(',').map(s => s.trim()).filter(Boolean)
+    const parts = raw.split(',').map(s => normalizeOrigin(s)).filter(Boolean)
     if (parts.length === 0) return true
     return parts
 }
@@ -20,9 +26,10 @@ await fastify.register(cors, {
         if (allowed === true) return cb(null, true)
 
         if (!origin) return cb(null, true)
-        if (Array.isArray(allowed) && allowed.includes(origin)) return cb(null, true)
+        const reqOrigin = normalizeOrigin(origin)
+        if (Array.isArray(allowed) && allowed.includes(reqOrigin)) return cb(null, true)
 
-        return cb(new Error('Not allowed by CORS'), false)
+        return cb(null, false)
     },
     credentials: true,
     methods: ['POST', 'GET', 'OPTIONS'],
